@@ -31,6 +31,7 @@ export default function SignIn() {
             console.log('User signed in successfully')
             // Clear the error message on successful sign-in
             setError('')
+            router.replace('/mytrip')
             // Navigate to the next screen if needed
         } catch (error) {
             const errorMessage = error.message

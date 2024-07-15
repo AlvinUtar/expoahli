@@ -32,6 +32,7 @@ export default function SignUp() {
       console.log('User created successfully')
       // Clear the error message on successful sign-up
       setError('')
+      router.replace('/mytrip')
       // Navigate to the sign-in screen or another screen as needed
     } catch (error) {
       const errorMessage = error.message

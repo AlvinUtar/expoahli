@@ -1,10 +1,12 @@
 import { View, Text } from 'react-native'
 import React from 'react'
 
-export default function MyTrip() {
+const mytrip = () => {
   return (
     <View>
-      <Text>mytrip</Text>
+      <Text>mytrsssip</Text>
     </View>
   )
 }
+
+export default mytrip
