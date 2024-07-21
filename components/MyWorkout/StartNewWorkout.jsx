@@ -2,8 +2,10 @@ import { View, Text, TouchableOpacity } from 'react-native'
 import React from 'react'
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/Colors';
-import { router } from 'expo-router';
+import { router, useRouter } from 'expo-router';
 export default function StartNewWorkout() {
+
+  const router=useRouter();
   return (
     <View style={{
         padding:20,
@@ -27,7 +29,7 @@ export default function StartNewWorkout() {
       >Time to plan a new workout! Get started below</Text>
 
       <TouchableOpacity
-      onPress={()=>router.push('/create-workout/createworkout')}
+      onPress={()=>router.push('/create-workout/search-place')}
       style={{
         padding:15,
         backgroundColor:Colors.PRIMARY,

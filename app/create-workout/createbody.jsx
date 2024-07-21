@@ -3,13 +3,13 @@ import React, { useContext, useEffect, useState } from 'react';
 import { router, useNavigation } from 'expo-router';
 import { Colors } from '../../constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
-import { SelectGoalList } from '../../constants/Options';
+import { SelectBodyList } from '../../constants/Options';
 import OptionCard from '../../components/CreateWorkout/OptionCard';
 import { CreateWorkoutContext } from '../../context/CreateWorkoutContext';
 
-export default function CreateWorkout() {
+export default function CreateBody() {
   const navigation = useNavigation();
-  const [selectedGoal, setSelectedGoal] = useState();
+  const [selectedBodyPart, setSelectedBodyPart] = useState(null);
   const { workoutData, setWorkoutData } = useContext(CreateWorkoutContext);
 
   useEffect(() => {
@@ -18,12 +18,16 @@ export default function CreateWorkout() {
       headerTransparent: true,
       headerTitle: '',
     });
-  }, [navigation]);
-  
+  }, []);
+
   useEffect(() => {
-    setWorkoutData(prevData => ({ ...prevData, title: selectedGoal }));
-  }, [selectedGoal]);
-  
+    setWorkoutData({ ...workoutData, bodyPart: selectedBodyPart });
+  }, [selectedBodyPart]);
+
+  useEffect(() => {
+    console.log(workoutData);
+  }, [workoutData]);
+
   return (
     <View
       style={{
@@ -36,7 +40,7 @@ export default function CreateWorkout() {
       <TouchableOpacity onPress={() => router.back()}>
         <Ionicons name="arrow-back" size={26} color="black" />
       </TouchableOpacity>
-  
+
       <Text
         style={{
           fontSize: 40,
@@ -44,7 +48,7 @@ export default function CreateWorkout() {
           marginTop: 20,
         }}
       >
-        Select Your Goal
+        Select Body Part
       </Text>
       <Text
         style={{
@@ -53,29 +57,33 @@ export default function CreateWorkout() {
           marginTop: 20,
         }}
       >
-        What you want to achieve
+        Where you want to train
       </Text>
-  
+
       <FlatList
-        data={SelectGoalList}
+        data={SelectBodyList}
         renderItem={({ item }) => (
           <TouchableOpacity
-            onPress={() => setSelectedGoal(item)}
+            onPress={() => setSelectedBodyPart(item)}
             style={{
               marginVertical: 10,
             }}
           >
-            <OptionCard option={item} selectedOption={selectedGoal} />
+            <OptionCard option={item} selectedOption={selectedBodyPart} />
           </TouchableOpacity>
         )}
         keyExtractor={(item) => item.id.toString()}
       />
+
       <TouchableOpacity
-        onPress={() => router.push('/create-workout/createbody')}
         style={{
           padding: 20,
           backgroundColor: Colors.PRIMARY,
           borderRadius: 15,
+          marginTop: 20,
+        }}
+        onPress={() => {
+          router.push('/create-workout/createlevel'); // Adjust the route as needed
         }}
       >
         <Text
@@ -91,5 +99,4 @@ export default function CreateWorkout() {
       </TouchableOpacity>
     </View>
   );
-  
 }
