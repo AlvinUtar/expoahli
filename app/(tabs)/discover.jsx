@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { SafeAreaView, View, Text, TextInput, FlatList, StyleSheet, TouchableOpacity, Image, Alert, ActivityIndicator, Button } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { Button, SafeAreaView, View, Text, TextInput, FlatList, StyleSheet, TouchableOpacity, Image, Alert, ActivityIndicator, Animated } from 'react-native';
 import { db, auth, storage } from '../../configs/FirebaseConfig'; // Adjust the path as needed
 import { collection, addDoc, getDocs, orderBy, query } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import * as ImagePicker from 'expo-image-picker';
+import { MaterialIcons } from '@expo/vector-icons'; // For icon
+import { Share } from 'react-native';
 
 export default function Discover() {
   const [posts, setPosts] = useState([]);
@@ -13,8 +15,8 @@ export default function Discover() {
   const [posting, setPosting] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [image, setImage] = useState(null);
+  const [scrollY] = useState(new Animated.Value(0));
 
-  // Listen for authentication changes to get the current user
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -27,7 +29,6 @@ export default function Discover() {
     return () => unsubscribe();
   }, []);
 
-  // Fetch posts when the current user is set
   useEffect(() => {
     if (!currentUser) return;
 
@@ -59,7 +60,6 @@ export default function Discover() {
     fetchPosts();
   }, [currentUser]);
 
-  // Handle adding a new post with optional image and text
   const handleAddPost = async () => {
     if (!currentUser) return;
 
@@ -69,24 +69,17 @@ export default function Discover() {
       let imageUrl = '';
 
       if (image) {
-        // Create a reference to the Firebase Storage location
         const imageRef = ref(storage, `images/${new Date().toISOString()}_${image.split('/').pop()}`);
-
-        // Convert image URI to blob
         const response = await fetch(image);
         const blob = await response.blob();
-
-        // Upload the blob to Firebase Storage
         await uploadBytes(imageRef, blob);
-
-        // Get the download URL for the uploaded image
         imageUrl = await getDownloadURL(imageRef);
       }
 
       const email = currentUser.email || '';
 
       await addDoc(collection(db, 'discover'), {
-        content: newPost.trim() || null, // Allow content to be null
+        content: newPost.trim() || null,
         timestamp: new Date().toISOString(),
         userId: currentUser.uid,
         userEmail: email,
@@ -95,7 +88,6 @@ export default function Discover() {
 
       console.log("Post added successfully");
 
-      // Refresh the posts list
       const postsCollection = collection(db, 'discover');
       const q = query(postsCollection, orderBy('timestamp', 'desc'));
       const querySnapshot = await getDocs(q);
@@ -116,7 +108,6 @@ export default function Discover() {
     }
   };
 
-  // Pick an image from the device's library
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -131,20 +122,57 @@ export default function Discover() {
     }
   };
 
-  // Remove the selected image
   const removeImage = () => {
     setImage(null);
   };
 
-  // Render individual post item
+  const handleSharePost = async (post) => {
+    try {
+      const shareOptions = {
+        title: 'Check out this post!',
+        message: post.content,
+        url: post.imageUrl,
+      };
+
+      const result = await Share.share(shareOptions);
+
+      if (result.action === Share.sharedAction) {
+        if (result.activityType) {
+          // Shared with activity type of result.activityType
+        } else {
+          // Shared
+        }
+      } else if (result.action === Share.dismissedAction) {
+        // Dismissed
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to share post.');
+      console.error('Error sharing post: ', error);
+    }
+  };
+
   const renderPost = ({ item }) => (
     <View style={styles.postContainer}>
       <Text style={styles.userEmail}>{item.userEmail}</Text>
       {item.content && <Text style={styles.postContent}>{item.content}</Text>}
       {item.imageUrl && <Image source={{ uri: item.imageUrl }} style={styles.postImage} />}
       <Text style={styles.timestamp}>{new Date(item.timestamp).toLocaleString()}</Text>
+      <TouchableOpacity onPress={() => handleSharePost(item)} style={styles.shareButton}>
+        <MaterialIcons name="share" size={24} color="white" />
+      </TouchableOpacity>
     </View>
   );
+
+  const handleScroll = Animated.event(
+    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+    { useNativeDriver: false },
+  );
+
+  const buttonOpacity = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
 
   return (
     <SafeAreaView style={styles.container}>
@@ -156,6 +184,7 @@ export default function Discover() {
           value={newPost}
           onChangeText={setNewPost}
           placeholder='Write a new post...'
+          placeholderTextColor='#888'
         />
         <TouchableOpacity onPress={handleAddPost} style={styles.addButton} disabled={posting}>
           {posting ? (
@@ -166,7 +195,11 @@ export default function Discover() {
         </TouchableOpacity>
       </View>
 
-      <Button title="Pick an image from camera roll" onPress={pickImage} />
+      <Animated.View style={[styles.pickImageButtonContainer, { opacity: buttonOpacity }]}>
+        <TouchableOpacity onPress={pickImage} style={styles.pickImageButton}>
+          <Text style={styles.pickImageButtonText}>Pick an image from camera roll</Text>
+        </TouchableOpacity>
+      </Animated.View>
 
       {image && (
         <View style={styles.imageContainer}>
@@ -184,6 +217,7 @@ export default function Discover() {
           data={posts}
           keyExtractor={(item) => item.id}
           renderItem={renderPost}
+          onScroll={handleScroll}
         />
       )}
     </SafeAreaView>
@@ -197,10 +231,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0f0',
   },
   header: {
-    fontSize: 26,
+    fontSize: 30,
+    fontFamily:'outfit-bold',
     fontWeight: 'bold',
     marginBottom: 15,
     color: '#333',
+    textAlign: 'center',
   },
   inputContainer: {
     flexDirection: 'row',
@@ -214,50 +250,62 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 2,
+    alignItems: 'center',
   },
   input: {
     flex: 1,
-    borderWidth: 0,
-    borderColor: '#ccc',
+    borderWidth: 1,
+    borderColor: '#ddd',
     borderRadius: 5,
     padding: 10,
     marginRight: 10,
+    fontFamily: 'outfit-medium',
+    backgroundColor: '#f9f9f9', // Subtle background color for input
   },
   addButton: {
     backgroundColor: '#007bff',
     borderRadius: 5,
-    padding: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    minWidth: 60,
+    minWidth: 80,
+    elevation: 3,
   },
   addButtonText: {
     color: '#fff',
     fontWeight: 'bold',
+    fontSize: 18,
+    fontFamily: 'outfit-bold',
   },
   postContainer: {
-    padding: 10,
-    marginBottom: 10,
+    padding: 15,
+    marginBottom: 15,
     backgroundColor: '#fff',
-    borderRadius: 8,
+    borderRadius: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
     shadowRadius: 8,
-    elevation: 2,
+    elevation: 3,
+    position: 'relative',
   },
   userEmail: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#555',
+    fontSize: 16,
+    fontFamily: 'outfit-medium',
+    color: '#333',
+    marginBottom: 5,
   },
   postContent: {
-    fontSize: 16,
-    marginVertical: 5,
+    fontSize: 18,
+    fontWeight: 'bold',
+    fontFamily: 'outfit-bold',
     color: '#333',
+    marginBottom: 10,
   },
   timestamp: {
-    fontSize: 12,
+    fontSize: 14,
+    fontFamily: 'outfit',
     color: '#888',
     marginTop: 5,
   },
@@ -267,7 +315,7 @@ const styles = StyleSheet.create({
     marginVertical: 10,
   },
   image: {
-    width: '80%',
+    width: '75%',
     height: 200,
     borderRadius: 8,
     resizeMode: 'cover',
@@ -287,8 +335,41 @@ const styles = StyleSheet.create({
   postImage: {
     width: '100%',
     height: 200,
-    marginTop: 10,
     borderRadius: 8,
-    resizeMode: 'cover',
+    marginTop: 10,
+  },
+  shareButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 50,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderColor: 'white',
+    borderWidth: 1,
+    zIndex: 1,
+  },
+  pickImageButtonContainer: {
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  pickImageButton: {
+    backgroundColor: '#007bff',
+    borderRadius: 5,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#007bff',
+    maxWidth: 300,
+    alignSelf: 'center',
+  },
+  pickImageButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'outfit-bold',
   },
 });
