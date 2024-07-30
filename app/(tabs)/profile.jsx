@@ -83,15 +83,18 @@ const styles = StyleSheet.create({
   },
   username: {
     fontSize: 24,
+    fontFamily: 'outfit-bold', // Apply custom font
     fontWeight: 'bold',
     marginVertical: 10,
   },
   email: {
     fontSize: 16,
+    fontFamily: 'outfit-medium', // Apply custom font
     color: '#6c757d',
   },
   message: {
     fontSize: 16,
+    fontFamily: 'outfit-medium', // Apply custom font
     color: '#dc3545',
     textAlign: 'center',
     marginTop: 20,
@@ -104,11 +107,13 @@ const styles = StyleSheet.create({
   },
   detailTitle: {
     fontSize: 18,
+    fontFamily: 'outfit-bold', // Apply custom font
     fontWeight: 'bold',
     marginBottom: 10,
   },
   bio: {
     fontSize: 16,
+    fontFamily: 'outfit-medium', // Apply custom font
     color: '#333',
     marginBottom: 20,
   },

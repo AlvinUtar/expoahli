@@ -8,7 +8,11 @@ export default function TabLayout() {
   return (
     <Tabs screenOptions={{
       headerShown: false,
-      tabBarActiveTintColor: Colors.PRIMARY
+      tabBarActiveTintColor: Colors.PRIMARY,
+      tabBarLabelStyle: {
+          fontFamily: 'outfit-medium', // Replace 'outfit-medium' with your custom font family
+          fontSize: 12, // You can adjust the font size as needed
+        },
     }}>
       <Tabs.Screen
         name="mytrip"
@@ -29,6 +33,13 @@ export default function TabLayout() {
         options={{
           tabBarLabel: 'Profile',
           tabBarIcon: ({ color }) => <Ionicons name="accessibility" size={24} color={color} />
+        }}
+      />
+      <Tabs.Screen
+        name="nearby"
+        options={{
+          tabBarLabel: 'Near By',
+          tabBarIcon: ({ color }) => <Ionicons name="locate" size={24} color={color} />
         }}
       />
     </Tabs>
