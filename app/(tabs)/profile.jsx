@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Image, Button, SafeAreaView, Alert } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, Image, Button, SafeAreaView, Alert, TouchableOpacity } from 'react-native';
 import { auth } from '../../configs/FirebaseConfig';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { useRouter } from 'expo-router';
+import { Accelerometer } from 'expo-sensors';
 
 const Profile = () => {
   const [user, setUser] = useState(null);
@@ -24,16 +25,19 @@ const Profile = () => {
     signOut(auth)
       .then(() => {
         Alert.alert('Signed Out', 'You have been signed out successfully.');
-        router.push('auth/sign-in'); // Ensure this path is correct
+        router.push('auth/sign-in');
       })
       .catch((error) => {
         Alert.alert('Sign Out Error', error.message);
       });
   };
 
-  // Function to get the username from email
   const getUsernameFromEmail = (email) => {
     return email.split('@')[0];
+  };
+
+  const startTracking = () => {
+    router.push('/create-workout/situp'); // Navigate to the Situp screen
   };
 
   return (
@@ -41,7 +45,7 @@ const Profile = () => {
       {user ? (
         <View style={styles.profileHeader}>
           <Image
-            source={require('./../../assets/images/userprofile.jpg')} // Replace with user's profile image URL
+            source={require('./../../assets/images/userprofile.jpg')}
             style={styles.profileImage}
           />
           <Text style={styles.username}>{getUsernameFromEmail(user.email) || 'User'}</Text>
@@ -59,6 +63,12 @@ const Profile = () => {
         {user && (
           <Button title="Log Out" onPress={handleLogout} color="#dc3545" />
         )}
+      </View>
+      <View style={styles.accelerometerContainer}>
+        <Text style={styles.detailTitle}>Sit-up Tracker</Text>
+        <TouchableOpacity onPress={startTracking} style={styles.button}>
+          <Text>Track Sit-ups</Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -116,6 +126,21 @@ const styles = StyleSheet.create({
     fontFamily: 'outfit-medium', // Apply custom font
     color: '#333',
     marginBottom: 20,
+  },
+  accelerometerContainer: {
+    marginTop: 20,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    padding: 20,
+    elevation: 1,
+  },
+  button: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#eee',
+    padding: 10,
+    borderRadius: 5,
+    marginTop: 10,
   },
 });
 

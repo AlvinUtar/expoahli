@@ -1,7 +1,15 @@
-import { View, Text, Image, StyleSheet, FlatList } from 'react-native';
-import React from 'react';
+import { SafeAreaView, ScrollView, View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, Pressable } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../../configs/FirebaseConfig'; // Import your Firestore configuration
 
 const UserWorkoutList = ({ userWorkout }) => {
+    const [completedExercises, setCompletedExercises] = useState({});
+    const [docCompletion, setDocCompletion] = useState({});
+    const [selectedWorkout, setSelectedWorkout] = useState(null);
+    const [modalVisible, setModalVisible] = useState(false);
+
     if (!userWorkout || !Array.isArray(userWorkout) || userWorkout.length === 0) {
         return (
             <View style={styles.noDataContainer}>
@@ -17,12 +25,69 @@ const UserWorkoutList = ({ userWorkout }) => {
         return idB - idA; // Descending order
     });
 
+    // Handle toggle of exercise completion
+    const handleExerciseToggle = async (docId, day, exerciseIndex) => {
+        setCompletedExercises(prev => {
+            const updated = {
+                ...prev,
+                [docId]: {
+                    ...prev[docId],
+                    [day]: {
+                        ...prev[docId]?.[day],
+                        [exerciseIndex]: !prev[docId]?.[day]?.[exerciseIndex]
+                    }
+                }
+            };
+            console.log('Updated completedExercises:', updated); // Debug state
+            return updated;
+        });
+
+        // Update Firestore
+        const workoutRef = doc(db, 'UserWorkout', docId);
+        try {
+            await updateDoc(workoutRef, {
+                [`completedExercises.${day}.${exerciseIndex}`]: !completedExercises[docId]?.[day]?.[exerciseIndex]
+            });
+        } catch (error) {
+            console.error('Error updating Firestore:', error);
+        }
+    };
+
+    // Calculate completion percentage for exercises in a given document
+    const calculateDocCompletionPercentage = (docId) => {
+        const workoutPlan = sortedWorkouts.find(workout => workout.docId === docId)?.workoutData?.workout_plan;
+        if (!workoutPlan || !workoutPlan.workout_schedule) return 0;
+
+        const totalExercises = workoutPlan.workout_schedule.reduce((total, day) => total + day.exercises.length, 0);
+        const completedExercisesCount = Object.values(completedExercises[docId] || {}).reduce((total, day) => {
+            return total + Object.values(day).filter(Boolean).length;
+        }, 0);
+
+        return (completedExercisesCount / totalExercises) * 100;
+    };
+
+    // Update doc completion percentages
+    useEffect(() => {
+        const newDocCompletion = {};
+        sortedWorkouts.forEach(workout => {
+            newDocCompletion[workout.docId] = calculateDocCompletionPercentage(workout.docId);
+        });
+        setDocCompletion(newDocCompletion);
+    }, [completedExercises]);
+
     // Render workout schedule
-    const renderWorkoutSchedule = ({ item }) => (
+    const renderWorkoutSchedule = ({ item, docId }) => (
         <View style={styles.scheduleContainer}>
             <Text style={styles.scheduleDay}>{item.day}</Text>
-            {item.exercises.map((exercise, index) => (
-                <View key={index} style={styles.exerciseContainer}>
+            {item.exercises.map((exercise, exerciseIndex) => (
+                <View key={exerciseIndex} style={styles.exerciseContainer}>
+                    <TouchableOpacity onPress={() => handleExerciseToggle(docId, item.day, exerciseIndex)}>
+                        <MaterialCommunityIcons
+                            name={completedExercises[docId]?.[item.day]?.[exerciseIndex] ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                            size={24}
+                            color={completedExercises[docId]?.[item.day]?.[exerciseIndex] ? 'green' : 'gray'}
+                        />
+                    </TouchableOpacity>
                     <Text style={styles.exerciseName}>{exercise.name}</Text>
                     <Text style={styles.exerciseDetails}>Sets: {exercise.sets}, Reps: {exercise.reps}, Rest: {exercise.rest}</Text>
                 </View>
@@ -34,34 +99,25 @@ const UserWorkoutList = ({ userWorkout }) => {
     const renderWorkoutCard = ({ item }) => {
         const workoutPlan = item.workoutData?.workout_plan || {};
         const gym = workoutPlan.gym || {};
-        const gymImageUrl = gym.gym_image_url || 'https://via.placeholder.com/150';
-        const locationInfo = item.locationInfo || {};
-        const locationImageUrl = locationInfo.photoRef
-            ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${locationInfo.photoRef}&key=${process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}`
-            : gymImageUrl;
 
         return (
-            <View style={styles.workoutCard}>
-                <Image
-                    source={{ uri: locationImageUrl }}
-                    style={styles.locationImage}
-                    onError={(e) => {
-                        console.log('Image fetch error:', e.nativeEvent.error);
-                        // Optionally set a fallback image here
-                    }}
-                />
+            <TouchableOpacity 
+                style={styles.workoutCard}
+                onPress={() => {
+                    setSelectedWorkout(item);
+                    setModalVisible(true);
+                }}
+            >
+                <View style={styles.cardHeader}>
+                    <Text style={styles.gymName}>{gym.name || 'Unknown Gym'}</Text>
+                </View>
                 <View style={styles.gymDetailsContainer}>
-                    <Image
-                        source={{ uri: gymImageUrl }}
-                        style={styles.gymImage}
-                    />
                     <View style={styles.gymInfoContainer}>
-                        <Text style={styles.gymName}>{gym.name || 'Unknown Gym'}</Text>
                         <Text style={styles.gymAddress}>{gym.address || 'Unknown Address'}</Text>
                         <Text style={styles.gymPrice}>{gym.price || 'Unknown Price'}</Text>
                         <Text style={styles.gymNearby}>{gym.nearby_gym || 'No Nearby Gym'}</Text>
                         <Text style={styles.gymCoordinates}>{gym.geo_coordinates || 'Unknown Coordinates'}</Text>
-                        <Text style={styles.gymUrl}>{gym.url || 'No URL Available'}</Text>
+                        <Text style={styles.gymUrl}>{gym.url ? gym.url : 'Most Recommended Gym'}</Text>
                     </View>
                 </View>
                 <View style={styles.infoContainer}>
@@ -77,158 +133,297 @@ const UserWorkoutList = ({ userWorkout }) => {
                     <Text style={styles.levelText}>
                         Training Level: {workoutPlan.training_level || 'Unknown Level'}
                     </Text>
+                    <Text style={styles.completionPercentage}>
+                        Completion: {docCompletion[item.docId]?.toFixed(2) || '0.00'}%
+                    </Text>
                 </View>
-                <FlatList
-                    data={workoutPlan.workout_schedule || []}
-                    renderItem={renderWorkoutSchedule}
-                    keyExtractor={(item, index) => index.toString()}
-                />
-            </View>
+            </TouchableOpacity>
+        );
+    };
+
+    // Render exercise detail modal
+    const renderExerciseDetailModal = () => {
+        if (!selectedWorkout) return null;
+    
+        const workoutPlan = selectedWorkout.workoutData?.workout_plan || {};
+        const completionPercentage = docCompletion[selectedWorkout.docId]?.toFixed(2) || '0.00';
+    
+        // Combine completion percentage and workout schedule into a single list
+        const modalData = [
+            { type: 'header', content: `Completion: ${completionPercentage}%` },
+            { type: 'schedule', content: workoutPlan.workout_schedule || [] }
+        ];
+    
+        // Render each item based on its type
+        const renderItem = ({ item }) => {
+            switch (item.type) {
+                case 'header':
+                    return (
+                        <View style={styles.modalHeaderContainer}>
+                            <Text style={styles.completionPercentageModal}>
+                                {item.content}
+                            </Text>
+                        </View>
+                    );
+                case 'schedule':
+                    return (
+                        <FlatList
+                            data={item.content}
+                            renderItem={({ item: scheduleItem }) => renderWorkoutSchedule({ item: scheduleItem, docId: selectedWorkout.docId })}
+                            keyExtractor={(scheduleItem) => `${scheduleItem.day}-${selectedWorkout.docId}`}
+                            ListHeaderComponent={<Text style={styles.scheduleTitle}>Workout Schedule</Text>}
+                        />
+                    );
+                default:
+                    return null;
+            }
+        };
+    
+        return (
+            <Modal
+                visible={modalVisible}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setModalVisible(false)}
+            >
+                <SafeAreaView style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <FlatList
+                            data={modalData}
+                            renderItem={renderItem}
+                            keyExtractor={(item, index) => index.toString()}
+                            contentContainerStyle={styles.modalScrollView}
+                            ListFooterComponent={
+                                <Pressable style={styles.closeButton} onPress={() => setModalVisible(false)}>
+                                    <Text style={styles.closeButtonText}>Close</Text>
+                                </Pressable>
+                            }
+                        />
+                    </View>
+                </SafeAreaView>
+            </Modal>
         );
     };
 
     return (
-        <FlatList
-            data={sortedWorkouts}
-            renderItem={renderWorkoutCard}
-            keyExtractor={(item) => item.docId}
-            ListEmptyComponent={
-                <View style={styles.noDataContainer}>
-                    <Text style={styles.noDataText}>No Workout Data Available</Text>
-                </View>
-            }
-        />
+        <View style={styles.container}>
+            <FlatList
+                data={sortedWorkouts}
+                renderItem={renderWorkoutCard}
+                keyExtractor={(item) => item.docId}
+                ListEmptyComponent={
+                    <View style={styles.noDataContainer}>
+                        <Text style={styles.noDataText}>No Workout Data Available</Text>
+                    </View>
+                }
+            />
+            {renderExerciseDetailModal()}
+        </View>
     );
 };
 
 const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: '#fff',
+    },
     noDataContainer: {
         justifyContent: 'center',
         alignItems: 'center',
         height: '100%',
+        backgroundColor: '#fce4ec',
     },
     noDataText: {
         fontFamily: 'outfit-medium',
         fontSize: 18,
-        color: 'gray',
+        color: '#d32f2f',
+        textAlign: 'center',
     },
     workoutCard: {
         marginBottom: 20,
         borderRadius: 15,
-        backgroundColor: 'white',
+        backgroundColor: '#ffffff',
         overflow: 'hidden',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 5,
-        elevation: 2,
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 3,
+        padding: 15,
     },
-    locationImage: {
-        width: '100%',
-        height: 240,
-        borderRadius: 15,
+    cardHeader: {
+        backgroundColor: '#e0f7fa',
+        padding: 10,
+        borderRadius: 10,
+        marginBottom: 15,
+        alignItems: 'center',
+    },
+    gymName: {
+        fontFamily: 'outfit-bold',
+        fontSize: 24,
+        color: '#000000',
+        marginBottom: 5,
     },
     gymDetailsContainer: {
-        flexDirection: 'row',
-        padding: 15,
+        paddingVertical: 15,
         backgroundColor: '#f9f9f9',
         borderBottomWidth: 1,
         borderBottomColor: '#ddd',
-    },
-    gymImage: {
-        width: 100,
-        height: 100,
         borderRadius: 10,
+        padding: 15,
     },
     gymInfoContainer: {
         marginLeft: 15,
         flex: 1,
         justifyContent: 'center',
     },
-    gymName: {
-        fontFamily: 'outfit-bold',
-        fontSize: 18,
-        color: 'black',
-    },
     gymAddress: {
         fontFamily: 'outfit',
-        fontSize: 14,
-        color: 'gray',
+        fontSize: 16,
+        color: '#000000',
+        flexWrap: 'wrap',
+        marginBottom: 5,
     },
     gymPrice: {
         fontFamily: 'outfit',
-        fontSize: 14,
-        color: 'gray',
-        marginTop: 5,
+        fontSize: 16,
+        color: '#000000',
+        marginBottom: 5,
     },
     gymNearby: {
         fontFamily: 'outfit',
-        fontSize: 14,
-        color: 'gray',
-        marginTop: 5,
+        fontSize: 16,
+        color: '#000000',
+        marginBottom: 5,
     },
     gymCoordinates: {
         fontFamily: 'outfit',
-        fontSize: 14,
-        color: 'gray',
-        marginTop: 5,
+        fontSize: 16,
+        color: '#000000',
+        marginBottom: 5,
     },
     gymUrl: {
         fontFamily: 'outfit',
-        fontSize: 14,
-        color: 'blue',
-        marginTop: 5,
+        fontSize: 16,
+        color: '#000000',
+        marginBottom: 5,
     },
     infoContainer: {
-        padding: 15,
+        paddingTop: 15,
     },
     locationText: {
         fontFamily: 'outfit-medium',
         fontSize: 20,
-        color: 'black',
+        color: '#d32f2f',
     },
     bodyPartText: {
         fontFamily: 'outfit',
         fontSize: 18,
-        color: 'gray',
+        color: '#4caf50',
         marginTop: 5,
     },
     goalText: {
         fontFamily: 'outfit',
         fontSize: 16,
-        color: 'darkgray',
+        color: '#ff5722',
         marginTop: 5,
     },
     levelText: {
         fontFamily: 'outfit',
         fontSize: 16,
-        color: 'darkgray',
+        color: '#9e9e9e',
         marginTop: 5,
     },
     scheduleContainer: {
         marginTop: 15,
-        padding: 10,
-        backgroundColor: '#f9f9f9',
+        paddingVertical: 10,
+        paddingHorizontal: 15,
+        backgroundColor: '#f1f8e9',
         borderRadius: 10,
     },
     scheduleDay: {
         fontFamily: 'outfit-bold',
         fontSize: 18,
-        color: 'black',
+        color: '#388e3c',
     },
     exerciseContainer: {
         marginTop: 10,
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexWrap: 'wrap',
     },
     exerciseName: {
-        fontFamily: 'outfit-medium',
+        fontFamily: 'outfit',
         fontSize: 16,
-        color: 'black',
+        marginLeft: 10,
+        flex: 1,
+        flexWrap: 'wrap',
     },
     exerciseDetails: {
         fontFamily: 'outfit',
         fontSize: 14,
-        color: 'gray',
+        color: '#9e9e9e',
+        marginLeft: 10,
+        flex: 1,
+        flexWrap: 'wrap',
+    },
+    completionPercentage: {
+        fontFamily: 'outfit-medium',
+        fontSize: 16,
+        color: '#4caf50',
+        marginTop: 10,
+    },
+    modalOverlay: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    },
+    modalContent: {
+        width: '90%',
+        backgroundColor: '#fff',
+        borderRadius: 15,
+        padding: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 3,
+    },
+    modalScrollView: {
+        flexGrow: 1,
+    },
+    modalTitle: {
+        fontFamily: 'outfit-bold',
+        fontSize: 24,
+        marginBottom: 15,
+    },
+    completionPercentageModal: {
+        fontFamily: 'outfit-medium',
+        fontSize: 16,
+        color: '#4caf50',
+        marginBottom: 15,
+    },
+    closeButton: {
+        marginTop: 20,
+        padding: 10,
+        backgroundColor: '#d32f2f',
+        borderRadius: 5,
+        alignItems: 'center',
+    },
+    closeButtonText: {
+        color: '#fff',
+        fontFamily: 'outfit-medium',
+        fontSize: 16,
+    },
+    scheduleTitle: {
+        fontFamily: 'outfit-bold',
+        fontSize: 18,
+        marginVertical: 10,
+        color: '#000',
+        textAlign:'center'
     },
 });
+
 
 export default UserWorkoutList;
